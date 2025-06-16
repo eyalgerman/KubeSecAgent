@@ -1,6 +1,46 @@
-# gitignore template for LangChain products, e.g., LangGraph, LangSmith
-# website: https://www.langchain.com/
-# website: https://www.langchain.com/langgraph
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+*.log
 
-# LangGraph
+# ===== Environments =====
+.env
+.venv/
+venv/
+env/
+
+# ===== Jupyter / Notebook =====
+.ipynb_checkpoints/
+
+# ===== LangGraph / LangChain =====
 .langgraph_api/
+.langchain/
+
+# ===== Chroma / RAG persistence =====
+rag_db/
+chroma_db/
+index_store/
+persist_index/
+
+# ===== Output Data =====
+*.tsv
+*.xlsx
+results/
+outputs/
+logs/
+
+# ===== IDEs / Editors =====
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# ===== System Files =====
+.DS_Store
+Thumbs.db
