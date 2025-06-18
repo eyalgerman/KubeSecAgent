@@ -8,7 +8,7 @@ from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 from tqdm import tqdm
 
-from evaluate_results import evaluate_llm_per_tool
+from evaluate_results import evaluate_llm_per_tool, evaluate_llm_per_tool_with_normalize
 from tools import summarize_yaml, search_tool, build_rag_tool
 from rag import start_rag
 import nodes
@@ -95,18 +95,25 @@ def run_agent_for_tool(filename="examples.json", tags_tool="checkov", limit=-1):
     results = process_configs(app, configs, llm)
     result_path = save_results(results, tags_tool=tags_tool)
     # evaluate results
+    print("Evaluating without normalization:")
     evaluate_llm_per_tool(result_path, tools_to_compare=[tags_tool, tags_tool + "_new"])
+    print("Evaluating with normalization:")
+    evaluate_llm_per_tool_with_normalize(result_path, tools_to_compare=[tags_tool, tags_tool + "_new"])
 
 
 def main(filename="examples.json", tags_tools=None, limit=-1):
     if tags_tools is None:
         tags_tools = ["checkov", "kube_linter", "terrascan"]
-        tags_tools = ["kube_linter", "terrascan"]
+        # tags_tools = ["kube_linter", "terrascan"]
     for tool in tqdm(tags_tools, desc="Running agents for tools"):
-        print(f"Running agent for tool: {tool}")
-        run_agent_for_tool(filename, tool, limit)
-        print(f"Finished processing with tool: {tool}")
+        try:
+            print(f"Running agent for tool: {tool}")
+            run_agent_for_tool(filename, tool, limit)
+            print(f"Finished processing with tool: {tool}")
+        except Exception as e:
+            print(f"Error processing tool {tool}: {e}")
+            continue
 
 
 if __name__ == "__main__":
-    main(limit=3)
+    main(limit=10)

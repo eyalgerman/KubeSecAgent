@@ -44,7 +44,7 @@ yaml:
 Input summary:
 {summary}
 
-look at prvious AI messages . if th rag tool was alredy usd do not use it again.
+look at previous AI messages . if th rag tool was already usd do not use it again.
 you need to choose the most relevant tag  for the summary 
 
 Expected final response format:
