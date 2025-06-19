@@ -94,7 +94,7 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
 
     # Print results
     for tool, metrics in results.items():
-        print(f"\n🔍 LLM Agent vs {tool.capitalize()}")
+        print(f"\n### LLM Agent vs {tool.capitalize()} ###")
         print(f"  Precision: {metrics['precision']:.3f}")
         print(f"  Recall:    {metrics['recall']:.3f}")
         print(f"  F1 Score:  {metrics['f1']:.3f}")
@@ -220,7 +220,7 @@ def evaluate_llm_per_tool_with_normalize(
         }
 
     for tool, metrics in results.items():
-        print(f"\n🔍 LLM Agent vs {tool.capitalize()}")
+        print(f"\n### LLM Agent vs {tool.capitalize()} ###")
         print(f"  Precision: {metrics['precision']:.3f}")
         print(f"  Recall:    {metrics['recall']:.3f}")
         print(f"  F1 Score:  {metrics['f1']:.3f}")

@@ -40,7 +40,7 @@ def build_rag_tool(tool_name: str, k: int = 5) -> tool:
             persist_directory=f"rag_db_{tool_name}"
         )
 
-        print(f"\n🔍 Querying RAG for tool: {tool_name}")
+        print(f"\nQuerying RAG for tool: {tool_name}")
         print(f"Query: {query}\n")
 
         results = db.similarity_search(query, k=k)
@@ -102,14 +102,18 @@ search_tool = TavilySearchResults(api_key=tavily_key)
 
 
 def summarize_yaml(yaml: str, llm) -> List[str]:
-    """Summarize YAML and return a list of security issues (or empty if none)."""
+    """
+    Parse a Kubernetes YAML manifest and emit a list of concise security
+    misconfiguration statements.
+    Returns an empty list if no issues are found.
+    """
     
     prompt = f"""You are a Kubernetes security expert.
 
 Analyze the following Kubernetes manifest and identify any potential security misconfigurations,
 missing best practices, or confirm if it appears secure and well-structured.
 
-find as much problems as possible 
+Find as much problems as possible, do not limit yourself.
 
 Respond with a short bullet list of issues (e.g., '- Containers run as root'), or just say "No issues found."
 Do not include explanations or suggestions.
@@ -117,13 +121,39 @@ Do not include explanations or suggestions.
 Manifest:
 {yaml}
 """
+    prompt2 = f"""
+    You are a Kubernetes security auditor.
+
+    Your inputs
+    -----------
+    yaml:
+    {yaml}
+
+    Task
+    ----
+    1. Inspect **every** resource and field.  
+    2. **Find as many verifiable security issues or missing best practices as possible.**  
+    3. For each finding, write **one bullet** using wording that matches the
+       titles of common Kubernetes security rules, such as:
+       • "Container image tag is 'latest'"
+       • "Container runs as privileged"
+       • "HostPath volume used"
+    4. If the manifest is fully compliant, output exactly:
+       No issues found.
+
+    Formatting
+    ----------
+    – Use one bullet per line, starting with a dash and a single space.  
+    – Do **not** include explanations, recommendations, counts, or code.  
+    – Keep the text short (max ~10 words per bullet).  
+    """
 
     # 1. Call LLM
     response = llm.invoke([HumanMessage(content=prompt)])
 
     # 2. Extract text
     summary_text = response.content.strip()
-    print(f"🧠 Final summary used:\n{summary_text}\n")
+    print(f"### Final summary used:\n{summary_text}\n ###")
 
     # 3. Convert to Python list
     if "no issues found" in summary_text.lower():

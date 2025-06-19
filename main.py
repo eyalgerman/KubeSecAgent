@@ -35,6 +35,26 @@ def build_langgraph_app(llm_with_tools, tools):
     graph.add_edge("tools", "k_expert")
     return graph.compile()
 
+def build_langgraph_app_with_validator(llm_with_tools, tools, tag_definitions, llm=None):
+    graph = StateGraph(nodes.AgentState)
+    graph.set_entry_point("k_expert")
+
+    graph.add_node("k_expert", nodes.k_expert(llm_with_tools))
+    graph.add_node("validator", nodes.TagValidator(llm, tag_definitions))
+
+    tool_node = ToolNode(tools=tools)
+    graph.add_node("tools", tool_node)
+
+    # -- existing edges
+    graph.add_conditional_edges("k_expert", nodes.tool_use)
+    graph.add_edge("tools", "k_expert")
+
+    # -- new validation edge
+    graph.add_edge("k_expert", "validator")
+    graph.set_finish_point("validator")   # graph ends here
+    return graph.compile()
+
+
 
 def process_configs(app, configs, llm):
     all_results = []
@@ -57,6 +77,7 @@ def process_configs(app, configs, llm):
             "file_name": config["file"],
             "tags": file_tags
         })
+        print(f"Processed {config['file']} with tags: {file_tags}\n\n")
 
     return all_results
 
@@ -73,7 +94,7 @@ def save_results(results, out_dir="results", tags_tool="checkov"):
     return output_path
 
 
-def run_agent_for_tool(filename="examples.json", tags_tool="checkov", limit=-1):
+def run_agent_for_tool(filename="examples.json", tags_tool="checkov", limit=-1, with_validation=True):
 
     if not os.path.exists(f"rag_db_{tags_tool}"):
         start_rag(tags_tool)
@@ -84,7 +105,11 @@ def run_agent_for_tool(filename="examples.json", tags_tool="checkov", limit=-1):
     rag = build_rag_tool(tags_tool)
     tools = [search_tool, rag]
     llm_with_tools = llm.bind_tools(tools=tools)
-    app = build_langgraph_app(llm_with_tools, tools)
+    if with_validation:
+        tag_defs = json.load(open("misconfigs_map.json")).get(tags_tool, {})
+        app = build_langgraph_app_with_validator(llm_with_tools, tools, tag_definitions=tag_defs, llm=llm)
+    else:
+        app = build_langgraph_app(llm_with_tools, tools)
 
     with open(filename, "r", encoding="utf-8") as f:
         configs = json.load(f)
@@ -100,14 +125,14 @@ def run_agent_for_tool(filename="examples.json", tags_tool="checkov", limit=-1):
     evaluate_llm_per_tool_with_normalize(result_path, tools_to_compare=[tags_tool, tags_tool + "_new"])
 
 
-def main(filename="examples.json", tags_tools=None, limit=-1):
+def main(filename="examples.json", tags_tools=None, limit=-1, with_validation=True):
     if tags_tools is None:
         tags_tools = ["checkov" ]#, "kube_linter", "terrascan"]
         # tags_tools = ["kube_linter", "terrascan"]
     for tool in tqdm(tags_tools, desc="Running agents for tools"):
         try:
             print(f"Running agent for tool: {tool}")
-            run_agent_for_tool(filename, tool, limit)
+            run_agent_for_tool(filename, tool, limit, with_validation=with_validation)
             print(f"Finished processing with tool: {tool}")
         except Exception as e:
             print(f"Error processing tool {tool}: {e}")
@@ -115,4 +140,4 @@ def main(filename="examples.json", tags_tools=None, limit=-1):
 
 
 if __name__ == "__main__":
-    main(limit=2)
+    main(filename="10k_open_source_manifests.json", limit=5, with_validation=True)

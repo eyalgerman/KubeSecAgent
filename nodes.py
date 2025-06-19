@@ -27,7 +27,7 @@ You are a Kubernetes security expert.
 Your task:
 1. Analyze the following Kubernetes YAML and misconfig summary sentence.
 
-** its important to know you only use the rag tool once . then you must continue and choose the most relevant tag 
+** its important to know you only use the rag tool once, then you must continue and choose the most relevant tag 
 Instructions:
 Do not invent or add extra problems.
 You may only use 1 sentence per tool call.
@@ -38,18 +38,16 @@ this is the context massages:
 }
 The Rag tool retrieve  options . you need to choose the most relevant one for the summary 
 
-
-
 yaml:
 {yaml}
 
 Input summary:
 {summary}
 
-look at previous AI messages . if the rag tool was already usd do not use it again.
+Look at previous AI messages . if the rag tool was already usd do not use it again.
 you need to choose the most relevant tag  for the summary 
 
-Expected final response format **exactly**:
+Expected final response format **exactly**, if none match, answer `no_error`:
 
 ** finish **
 tags: <tag-1>, <tag-2>, …, <tag-N>
@@ -100,5 +98,42 @@ def tool_use(state: AgentState):
         return "tools"
     else:
         return END
-    
+
+
+class TagValidator:
+    """
+    Filter out false positives produced by k_expert.
+    Keeps only tags explicitly confirmed by an LLM (or rule engine).
+    """
+    def __init__(self, llm, tag_definitions):
+        """
+        Args:
+            llm:   Chat model (same as other nodes).
+            tag_definitions (dict[str, str]): canonical explanation for each tag,
+                      e.g. {"CKV_K8S_123": "Pod must not run as root", ...}
+        """
+        self.llm = llm
+        self.tag_defs = tag_definitions
+
+    def __call__(self, state):
+        yaml_doc  = state["yaml"]
+        summary   = state["summary"]
+        tags      = state.get("tags", [])
+
+        confirmed = []
+        for tag in tags:
+            tag_def = self.tag_defs.get(tag, "")
+            prompt = f"""You are a Kubernetes security auditor.\n
+YAML:\n{yaml_doc}\n
+Issue summary:\n{summary}\n
+Proposed tag: {tag}\nDefinition: {tag_def}\n
+Question: Does the YAML truly violate this rule? Reply with 'YES' or 'NO' and one-line reason."""
+            # reply = self.llm.invoke(prompt).content.strip().lower()
+            reply = self.llm.invoke([HumanMessage(content=prompt)]).content.strip().lower()
+            print(f"Tag: {tag}, Reply: {reply}")
+            if reply.startswith("yes"):
+                confirmed.append(tag)
+
+        state["tags"] = confirmed
+        return state
 
