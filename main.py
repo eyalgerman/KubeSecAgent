@@ -7,7 +7,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
 from tqdm import tqdm
-
 from evaluate_results import evaluate_llm_per_tool, evaluate_llm_per_tool_with_normalize
 from tools import summarize_yaml, search_tool, build_rag_tool
 from rag import start_rag
@@ -49,10 +48,10 @@ def process_configs(app, configs, llm):
                 "messages": ["start"],
                 "yaml": yml,
                 "summary": missconfig,
-                "tag": None
+                "tags": []
             }
             result = app.invoke(state)
-            file_tags.append(result["tag"])
+            file_tags.extend(result["tags"])
 
         all_results.append({
             "file_name": config["file"],
@@ -103,7 +102,7 @@ def run_agent_for_tool(filename="examples.json", tags_tool="checkov", limit=-1):
 
 def main(filename="examples.json", tags_tools=None, limit=-1):
     if tags_tools is None:
-        tags_tools = ["checkov", "kube_linter", "terrascan"]
+        tags_tools = ["checkov" ]#, "kube_linter", "terrascan"]
         # tags_tools = ["kube_linter", "terrascan"]
     for tool in tqdm(tags_tools, desc="Running agents for tools"):
         try:
@@ -116,4 +115,4 @@ def main(filename="examples.json", tags_tools=None, limit=-1):
 
 
 if __name__ == "__main__":
-    main(limit=10)
+    main(limit=2)

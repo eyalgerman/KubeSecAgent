@@ -21,7 +21,7 @@ load_dotenv()
 # )
 
 
-def build_rag_tool(tool_name: str):
+def build_rag_tool(tool_name: str, k: int = 5) -> tool:
     """
     Creates a RAG @tool instance for a specific tool (checkov, terrascan, kube_linter).
     """
@@ -43,7 +43,7 @@ def build_rag_tool(tool_name: str):
         print(f"\n🔍 Querying RAG for tool: {tool_name}")
         print(f"Query: {query}\n")
 
-        results = db.similarity_search(query, k=5)
+        results = db.similarity_search(query, k=k)
 
         print(f"RAG results: {results}\n")
 
@@ -135,5 +135,6 @@ Manifest:
         for line in summary_text.splitlines()
         if line.strip() and not line.lower().startswith("no issues")
     ]
+    print(issues)
 
     return issues

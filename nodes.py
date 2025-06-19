@@ -1,3 +1,5 @@
+import re
+
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import END , add_messages
 from typing import TypedDict, Annotated
@@ -11,7 +13,7 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]  # user/agent conversation
     yaml: Optional[str] 
     summary: Optional[str]  
-    tag : Optional[str]     
+    tags : Optional[list[str]]
 
 
 def k_expert(llm):
@@ -34,7 +36,7 @@ this is the context massages:
 {
     messages
 }
-The Rag tool retrive  options . you need to choose the most relevant one for the summary 
+The Rag tool retrieve  options . you need to choose the most relevant one for the summary 
 
 
 
@@ -44,26 +46,41 @@ yaml:
 Input summary:
 {summary}
 
-look at previous AI messages . if th rag tool was already usd do not use it again.
+look at previous AI messages . if the rag tool was already usd do not use it again.
 you need to choose the most relevant tag  for the summary 
 
-Expected final response format:
+Expected final response format **exactly**:
 
 ** finish **
-the most relevant tag is :
+tags: <tag-1>, <tag-2>, …, <tag-N>
 """
 
         response = llm.invoke([HumanMessage(content=prompt)])
         print(response.content)
-        if "finish" in response.content:
-                    return {
-            "messages": [response],
-            "tag": response.content.split(":")[1].strip()
-        }
-        else:
-            return {
-                "messages": [response],
-            }
+
+        # Always append the assistant message to history
+        new_state = {"messages": messages + [response]}
+
+        if "finish" in response.content.lower():
+            # Extract everything after the first ':' on the 'tags:' line
+            tag_line = response.content.split(":", 1)[1]
+            # Split on commas or new-lines, strip whitespace, keep non-empty
+            new_tags = [t.strip() for t in re.split(r"[,\n]", tag_line) if t.strip()]
+
+            # Merge with any tags we already have
+            merged_tags = list(dict.fromkeys(state.get("tags", []) + new_tags))  # dedupe, preserve order
+            new_state["tags"] = merged_tags
+
+        return new_state
+        # if "finish" in response.content:
+        #             return {
+        #     "messages": [response],
+        #     "tag": response.content.split(":")[1].strip()
+        # }
+        # else:
+        #     return {
+        #         "messages": [response],
+        #     }
 
     return expert
 
