@@ -17,6 +17,23 @@ class AgentState(TypedDict):
 
 
 def k_expert(llm):
+    """Return a stateful expert function for a LangGraph node.
+
+    The returned ``expert`` callable expects a ``state`` mapping compatible with
+    :class:`AgentState` and updates it based on LLM output. ``state`` should
+    contain at least the following keys:
+
+    - ``messages``: list of prior :class:`HumanMessage`/``AIMessage`` objects.
+    - ``yaml``: the Kubernetes manifest under analysis (``str`` or ``None``).
+    - ``summary``: a one-line description of the misconfiguration.
+    - ``tags``: list of already selected misconfiguration tags.
+
+    On each invocation the LLM receives the current conversation, YAML and
+    summary, then replies with additional guidance. The assistant message is
+    appended to ``messages``. If the reply includes ``finish``, any tags
+    following ``tags:`` are parsed and merged into ``state['tags']`` before the
+    updated ``state`` is returned.
+    """
     def expert(state):
         messages = state.get("messages", [])
         yaml = state.get("yaml", [])
