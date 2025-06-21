@@ -10,6 +10,8 @@ MISS_CONFIG_MAP_PATH = "misconfigs_map.json"
 def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_compare=None):
     """
     Evaluate LLM-detected tags against specific tool-detected tags.
+    In addition to precision, recall and F1, counts of false positives
+    (extra tags) and false negatives (misses) are returned for each tool.
 
     Args:
         llm_json_path (str): Path to the LLM output JSON.
@@ -56,6 +58,9 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
     for tool_name, tool_col in tool_columns.items():
         precisions, recalls, f1s = [], [], []
 
+        fp_total = 0
+        fn_total = 0
+
         for _, row in merged.iterrows():
             try:
                 llm_tags = set(row["tags"])
@@ -79,6 +84,9 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
             if not all_tags:
                 continue
 
+            fp_total += len(llm_tags - tool_tags)
+            fn_total += len(tool_tags - llm_tags)
+
             y_true = [1 if tag in tool_tags else 0 for tag in all_tags]
             y_pred = [1 if tag in llm_tags else 0 for tag in all_tags]
 
@@ -86,10 +94,13 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
             recalls.append(recall_score(y_true, y_pred, zero_division=0))
             f1s.append(f1_score(y_true, y_pred, zero_division=0))
 
+        count = len(precisions)
         results[tool_name] = {
-            "precision": sum(precisions) / len(precisions) if precisions else 0.0,
-            "recall": sum(recalls) / len(recalls) if recalls else 0.0,
-            "f1": sum(f1s) / len(f1s) if f1s else 0.0
+            "precision": sum(precisions) / count if count else 0.0,
+            "recall": sum(recalls) / count if count else 0.0,
+            "f1": sum(f1s) / count if count else 0.0,
+            "false_positives": fp_total / count if count else 0.0,
+            "misses": fn_total / count if count else 0.0,
         }
 
     # Print results
@@ -98,6 +109,8 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
         print(f"  Precision: {metrics['precision']:.3f}")
         print(f"  Recall:    {metrics['recall']:.3f}")
         print(f"  F1 Score:  {metrics['f1']:.3f}")
+        print(f"  Extras:    {metrics['false_positives']:.3f}")
+        print(f"  Misses:    {metrics['misses']:.3f}")
 
     return results
 
@@ -138,6 +151,7 @@ def evaluate_llm_per_tool_with_normalize(
     """
     Evaluate LLM-detected tags against specific tool-detected tags,
     normalizing all tags using missconfig_map.json for a fair comparison.
+    Returns precision, recall, F1, as well as counts for extra and missing labels.
     """
 
     # Load LLM results
@@ -176,6 +190,8 @@ def evaluate_llm_per_tool_with_normalize(
         tag_norm_map = build_normalization_map_from_json(missconfig_json_path, tool_shortname)
         precisions, recalls, f1s = [], [], []
         skipped = 0
+        fp_total = 0
+        fn_total = 0
 
         if tool_col not in merged.columns:
             print(f"Warning: Tool column '{tool_col}' not found in data. Skipping.")
@@ -204,6 +220,9 @@ def evaluate_llm_per_tool_with_normalize(
                 skipped += 1
                 continue
 
+            fp_total += len(llm_tags - tool_tags)
+            fn_total += len(tool_tags - llm_tags)
+
             y_true = [1 if tag in tool_tags else 0 for tag in all_tags]
             y_pred = [1 if tag in llm_tags else 0 for tag in all_tags]
 
@@ -211,12 +230,15 @@ def evaluate_llm_per_tool_with_normalize(
             recalls.append(recall_score(y_true, y_pred, zero_division=0))
             f1s.append(f1_score(y_true, y_pred, zero_division=0))
 
+        count = len(precisions)
         results[tool_shortname] = {
-            "precision": sum(precisions) / len(precisions) if precisions else 0.0,
-            "recall": sum(recalls) / len(recalls) if recalls else 0.0,
-            "f1": sum(f1s) / len(f1s) if f1s else 0.0,
+            "precision": sum(precisions) / count if count else 0.0,
+            "recall": sum(recalls) / count if count else 0.0,
+            "f1": sum(f1s) / count if count else 0.0,
             "skipped": skipped,
-            "count": len(precisions)
+            "count": count,
+            "false_positives": fp_total / count if count else 0.0,
+            "misses": fn_total / count if count else 0.0,
         }
 
     for tool, metrics in results.items():
@@ -224,6 +246,8 @@ def evaluate_llm_per_tool_with_normalize(
         print(f"  Precision: {metrics['precision']:.3f}")
         print(f"  Recall:    {metrics['recall']:.3f}")
         print(f"  F1 Score:  {metrics['f1']:.3f}")
+        print(f"  Extras:    {metrics['false_positives']:.3f}")
+        print(f"  Misses:    {metrics['misses']:.3f}")
         print(f"  Skipped:   {metrics['skipped']} (out of {metrics['skipped'] + metrics['count']})")
 
     return results

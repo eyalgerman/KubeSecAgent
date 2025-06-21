@@ -40,3 +40,14 @@ OPENAI_API_KEY=your-openai-key
 GOOGLE_API_KEY=your-google-key  # if using Gemini
 TAVILY_API_KEY=your-tavily-key  # if using Tavily
 ```
+
+## 📊 Evaluation
+
+Use `evaluate_results.py` to compare the agent's output with labels from
+industry tools. The script prints precision, recall, and F1 along with the
+average number of extra tags (false positives) and missing tags (misses) per
+configuration for each tool.
+
+```bash
+python evaluate_results.py path/to/agent_results.json
+```
