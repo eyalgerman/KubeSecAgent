@@ -15,6 +15,8 @@ import nodes
 load_dotenv()
 
 def setup_llm():
+    """Return the OpenAI chat model used by the agent."""
+
     # Uncomment below to use Gemini instead of OpenAI
     # from langchain_google_genai import ChatGoogleGenerativeAI
     # return ChatGoogleGenerativeAI(
@@ -25,6 +27,16 @@ def setup_llm():
 
 
 def build_langgraph_app(llm_with_tools, tools):
+    """Compile a simple LangGraph graph for running the agent.
+
+    Args:
+        llm_with_tools: Chat model with tools bound.
+        tools (list): Tool callables to expose.
+
+    Returns:
+        The compiled graph instance.
+    """
+
     graph = StateGraph(nodes.AgentState)
     graph.set_entry_point("k_expert")
     graph.add_node("k_expert", nodes.k_expert(llm_with_tools))
@@ -36,6 +48,18 @@ def build_langgraph_app(llm_with_tools, tools):
     return graph.compile()
 
 def build_langgraph_app_with_validator(llm_with_tools, tools, tag_definitions, llm=None):
+    """Compile a LangGraph graph with a validator node.
+
+    Args:
+        llm_with_tools: Chat model with tools bound.
+        tools (list): Tool callables to expose.
+        tag_definitions (dict): Mapping of tag -> description for validation.
+        llm: Optional chat model for the validator.
+
+    Returns:
+        The compiled graph instance.
+    """
+
     graph = StateGraph(nodes.AgentState)
     graph.set_entry_point("k_expert")
 
@@ -57,6 +81,17 @@ def build_langgraph_app_with_validator(llm_with_tools, tools, tag_definitions, l
 
 
 def process_configs(app, configs, llm):
+    """Run the LangGraph app over a list of configs and collect tag results.
+
+    Args:
+        app: Compiled LangGraph app.
+        configs (list[dict]): List of file entries with ``file`` and ``file_content``.
+        llm: Chat model used for YAML summarization.
+
+    Returns:
+        List of dicts with ``file_name`` and extracted ``tags``.
+    """
+
     all_results = []
 
     for config in tqdm(configs, desc="Processing configs"):
@@ -83,6 +118,17 @@ def process_configs(app, configs, llm):
 
 
 def save_results(results, out_dir="results", tags_tool="checkov"):
+    """Persist results to a timestamped JSON file and return its path.
+
+    Args:
+        results (list): Output from :func:`process_configs`.
+        out_dir (str): Directory to write results into.
+        tags_tool (str): Name of the tool used for tagging.
+
+    Returns:
+        Path to the saved JSON file.
+    """
+
     os.makedirs(out_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = os.path.join(out_dir, f"agent_results_tags_{tags_tool}_{timestamp}.json")
@@ -95,6 +141,17 @@ def save_results(results, out_dir="results", tags_tool="checkov"):
 
 
 def run_agent_for_tool(filename="examples.json", tags_tool="checkov", limit=-1, with_validation=True):
+    """Run the agent on a single tool's dataset and evaluate the results.
+
+    Args:
+        filename (str): JSON file containing configs to process.
+        tags_tool (str): Tool name whose tag database is used.
+        limit (int): Maximum number of configs to process; ``-1`` means all.
+        with_validation (bool): Whether to run the validator node.
+
+    Returns:
+        None. Results are saved to disk and printed to stdout.
+    """
 
     if not os.path.exists(f"rag_db_{tags_tool}"):
         start_rag(tags_tool)
@@ -126,6 +183,15 @@ def run_agent_for_tool(filename="examples.json", tags_tool="checkov", limit=-1, 
 
 
 def main(filename="examples.json", tags_tools=None, limit=-1, with_validation=True):
+    """Entry point for running the agent over multiple tagging tools.
+
+    Args:
+        filename (str): JSON file of configs.
+        tags_tools (list[str] or None): Tools to run; defaults to ["checkov"].
+        limit (int): Maximum configs to process per tool.
+        with_validation (bool): Whether to enable result validation.
+    """
+
     if tags_tools is None:
         tags_tools = ["checkov" ]#, "kube_linter", "terrascan"]
         # tags_tools = ["kube_linter", "terrascan"]
