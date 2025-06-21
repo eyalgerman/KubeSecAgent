@@ -9,6 +9,17 @@ from langchain_community.vectorstores import Chroma
 
 
 def start_rag(tags_tool="checkov"):
+    """Build a vector store for retrieval-augmented generation.
+
+    Parameters
+    ----------
+    tags_tool : str, optional
+        Key in ``misconfigs_map.json`` that selects which tool's
+        misconfiguration descriptions to embed. Defaults to ``"checkov"``.
+
+    The function reads ``misconfigs_map.json`` and writes a Chroma database
+    to ``rag_db_<tags_tool>`` containing deduplicated description vectors.
+    """
     print("Building RAG database...")
 
     with open("misconfigs_map.json") as f:
