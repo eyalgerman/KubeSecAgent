@@ -25,6 +25,8 @@ K_EXPERT_NODE = "k_expert"
 TOOL_NODE = "tools"
 VALIDATOR_NODE = "validator"
 
+MISS_CONFIG_MAP_PATH = "misconfigs_map.json"
+
 
 def setup_llm(model_provider: str, model_name: str):
     """
@@ -79,75 +81,115 @@ def setup_llm(model_provider: str, model_name: str):
     raise ValueError(f"Unsupported model provider: {model_provider}")
 
 
-def build_graph(llm_with_tools, tools, validator_config: dict | None = None):
-    """
-    Compiles a LangGraph graph, with an optional validator node.
-    This single function replaces the two separate build functions.
+# def build_graph(llm_with_tools, tools, validator_config: dict | None = None):
+#     """
+#     Compiles a LangGraph graph, with an optional validator node.
+#     This single function replaces the two separate build functions.
+#
+#     Args:
+#         llm_with_tools: Chat model with tools bound.
+#         tools (list): Tool callables to expose.
+#         validator_config (dict | None): If provided, adds a validator node.
+#                                         Expected keys: "llm" and "tag_definitions".
+#
+#     Returns:
+#         The compiled graph instance.
+#     """
+#     graph = StateGraph(nodes.AgentState)
+#     graph.set_entry_point(K_EXPERT_NODE)
+#
+#     # Add core nodes
+#     graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
+#     graph.add_node(TOOL_NODE, ToolNode(tools=tools))
+#
+#     # Add core edges
+#     graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
+#     graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
+#
+#     # Conditionally add the validator node and its connections
+#     if validator_config:
+#         graph.add_node(
+#             VALIDATOR_NODE,
+#             nodes.TagValidator(validator_config["llm"], validator_config["tag_definitions"])
+#         )
+#         # The K_Expert's final answer is sent to the validator
+#         graph.add_edge(K_EXPERT_NODE, VALIDATOR_NODE)
+#         graph.set_finish_point(VALIDATOR_NODE)
+#     else:
+#         # If no validator, the graph finishes after the K_Expert gives a final answer
+#         graph.set_finish_point(K_EXPERT_NODE)
+#
+#     return graph.compile()
 
-    Args:
-        llm_with_tools: Chat model with tools bound.
-        tools (list): Tool callables to expose.
-        validator_config (dict | None): If provided, adds a validator node.
-                                        Expected keys: "llm" and "tag_definitions".
 
-    Returns:
-        The compiled graph instance.
-    """
+def build_graph(llm_with_tools, tools):
     graph = StateGraph(nodes.AgentState)
     graph.set_entry_point(K_EXPERT_NODE)
-
-    # Add core nodes
     graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
-    graph.add_node(TOOL_NODE, ToolNode(tools=tools))
-
-    # Add core edges
+    tool_node = ToolNode(tools=tools)
+    graph.add_node(TOOL_NODE, tool_node)
     graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
     graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
-
-    # Conditionally add the validator node and its connections
-    if validator_config:
-        graph.add_node(
-            VALIDATOR_NODE,
-            nodes.TagValidator(validator_config["llm"], validator_config["tag_definitions"])
-        )
-        # The K_Expert's final answer is sent to the validator
-        graph.add_edge(K_EXPERT_NODE, VALIDATOR_NODE)
-        graph.set_finish_point(VALIDATOR_NODE)
-    else:
-        # If no validator, the graph finishes after the K_Expert gives a final answer
-        graph.set_finish_point(K_EXPERT_NODE)
-
     return graph.compile()
 
 
-def process_configs(app, configs: list[dict], llm):
-    """Run the LangGraph app over a list of configs and collect tag results."""
+def build_graph_with_validator(llm_with_tools, tools, tag_definitions, llm):
+    print("Using graph with validator node.")
+    graph = StateGraph(nodes.AgentState)
+    graph.set_entry_point(K_EXPERT_NODE)
+    graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
+    tool_node = ToolNode(tools=tools)
+    graph.add_node(TOOL_NODE, tool_node)
+    graph.add_node(VALIDATOR_NODE, nodes.TagValidator(llm, tag_definitions))
+    graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
+    graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
+    graph.add_edge(K_EXPERT_NODE, VALIDATOR_NODE)
+    graph.set_finish_point(VALIDATOR_NODE)
+    return graph.compile()
+
+def process_configs(app, configs, llm):
+    """Run the LangGraph app over a list of configs and collect tag results.
+    Args:
+        app: Compiled LangGraph app.
+        configs (list[dict]): List of file entries with ``file`` and ``file_content``.
+        llm: Chat model used for YAML summarization.
+    Returns:
+        List of dicts with ``file_name`` and extracted ``tags``.
+    """
+
     all_results = []
     for config in tqdm(configs, desc="Processing configs"):
-        yaml_content = config["file_content"]
+        yml = config["file_content"]
         file_tags = []
 
-        # Renamed 'missconfig' to 'summary' for better clarity.
-        for summary in summarize_yaml(yaml_content, llm):
-            initial_state = {
+        for missconfig in summarize_yaml(yml, llm):
+            state = {
                 "messages": ["start"],
-                "yaml": yaml_content,
-                "summary": summary,
-                "tags": [],
+                "yaml": yml,
+                "summary": missconfig,
+                "tags": []
             }
-            # Using more descriptive names for the state before and after invocation.
-            final_state = app.invoke(initial_state)
-            if final_state.get("tags"):
-                file_tags.extend(final_state["tags"])
+            result = app.invoke(state)
+            file_tags.extend(result["tags"])
 
-        all_results.append({"file_name": config["file"], "tags": file_tags})
+        all_results.append({
+            "file_name": config["file"],
+            "tags": file_tags
+        })
         print(f"Processed {config['file']} with tags: {file_tags}\n\n")
 
     return all_results
 
 
 def save_results(results: list, out_dir: str = "results", tags_tool: str = "checkov"):
-    """Persist results to a timestamped JSON file and return its path."""
+    """Persist results to a timestamped JSON file and return its path.
+    Args:
+        results (list): Output from func:`process_configs`.
+        out_dir (str): Directory to write results into.
+        tags_tool (str): Name of the tool used for tagging.
+    Returns:
+        Path to the saved JSON file.
+    """
     os.makedirs(out_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_path = os.path.join(out_dir, f"agent_results_tags_{tags_tool}_{timestamp}.json")
@@ -162,7 +204,7 @@ def save_results(results: list, out_dir: str = "results", tags_tool: str = "chec
 def _setup_agent_and_tools(tags_tool: str, with_validation: bool, model_provider: str, model_name: str):
     """A helper function to handle all the setup logic for the agent."""
     if not os.path.exists(f"rag_db_{tags_tool}"):
-        start_rag(tags_tool)
+        start_rag(tags_tool, MISS_CONFIG_MAP_PATH)
     else:
         print("RAG DB already initialized. Skipping setup.")
 
@@ -173,12 +215,16 @@ def _setup_agent_and_tools(tags_tool: str, with_validation: bool, model_provider
 
     validator_config = None
     if with_validation:
-        with open("misconfigs_map.json", "r", encoding="utf-8") as f:
+        with open(MISS_CONFIG_MAP_PATH, "r", encoding="utf-8") as f:
             all_tag_defs = json.load(f)
         tag_definitions = all_tag_defs.get(tags_tool, {})
         validator_config = {"llm": llm, "tag_definitions": tag_definitions}
 
-    app = build_graph(llm_with_tools, tools, validator_config)
+    # app = build_graph(llm_with_tools, tools, validator_config)
+    if with_validation:
+        app = build_graph_with_validator(llm_with_tools, tools, tag_definitions, llm)
+    else:
+        app = build_graph(llm_with_tools, tools)
     return app, llm
 
 
@@ -222,7 +268,7 @@ def main():
         help="The provider for the language model."
     )
     parser.add_argument(
-        "--model-name", type=str, default="gpt-4o",
+        "--model-name", type=str, default="gpt-4o-mini",
         help='Model to use. E.g., "gpt-4o", "gemini-1.5-pro", or a Hugging Face ID like "NousResearch/Hermes-2-Pro-Llama-3-8B".'
     )
     parser.add_argument(

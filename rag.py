@@ -8,7 +8,7 @@ from langchain.text_splitter import CharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 
 
-def start_rag(tags_tool="checkov"):
+def start_rag(tags_tool="checkov", misconfigs_map_path="misconfigs_map.json"):
     """Build a vector store for retrieval-augmented generation.
 
     Parameters
@@ -22,7 +22,7 @@ def start_rag(tags_tool="checkov"):
     """
     print("Building RAG database...")
 
-    with open("misconfigs_map.json") as f:
+    with open(misconfigs_map_path) as f:
         raw_data = json.load(f)
         tool_data = raw_data.get(tags_tool, {})
 
