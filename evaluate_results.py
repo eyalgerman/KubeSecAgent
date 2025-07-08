@@ -12,6 +12,8 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
     Evaluate LLM-detected tags against specific tool-detected tags.
     In addition to precision, recall and F1, counts of false positives
     (extra tags) and false negatives (misses) are returned for each tool.
+    True/false positives/negatives are also tallied so that weighted
+    classification metrics can be computed across all misconfigurations.
 
     Args:
         llm_json_path (str): Path to the LLM output JSON.
@@ -60,6 +62,13 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
 
         fp_total = 0
         fn_total = 0
+        tp_configs = 0
+        fp_configs = 0
+        fn_configs = 0
+        tn_configs = 0
+        weighted_tp = 0
+        weighted_fp = 0
+        weighted_fn = 0
 
         for _, row in merged.iterrows():
             try:
@@ -82,10 +91,26 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
 
             all_tags = llm_tags.union(tool_tags)
             if not all_tags:
+                tn_configs += 1
                 continue
 
             fp_total += len(llm_tags - tool_tags)
             fn_total += len(tool_tags - llm_tags)
+
+            weighted_tp += len(llm_tags & tool_tags)
+            weighted_fp += len(llm_tags - tool_tags)
+            weighted_fn += len(tool_tags - llm_tags)
+
+            has_llm = bool(llm_tags)
+            has_tool = bool(tool_tags)
+            if has_llm and has_tool:
+                tp_configs += 1
+            elif has_llm and not has_tool:
+                fp_configs += 1
+            elif not has_llm and has_tool:
+                fn_configs += 1
+            else:
+                tn_configs += 1
 
             y_true = [1 if tag in tool_tags else 0 for tag in all_tags]
             y_pred = [1 if tag in llm_tags else 0 for tag in all_tags]
@@ -95,10 +120,30 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
             f1s.append(f1_score(y_true, y_pred, zero_division=0))
 
         count = len(precisions)
+
+        weighted_precision = (
+            weighted_tp / (weighted_tp + weighted_fp) if (weighted_tp + weighted_fp) else 0.0
+        )
+        weighted_recall = (
+            weighted_tp / (weighted_tp + weighted_fn) if (weighted_tp + weighted_fn) else 0.0
+        )
+        weighted_f1 = (
+            2 * weighted_precision * weighted_recall / (weighted_precision + weighted_recall)
+            if (weighted_precision + weighted_recall) > 0
+            else 0.0
+        )
+
         results[tool_name] = {
             "precision": sum(precisions) / count if count else 0.0,
             "recall": sum(recalls) / count if count else 0.0,
             "f1": sum(f1s) / count if count else 0.0,
+            "weighted_precision": weighted_precision,
+            "weighted_recall": weighted_recall,
+            "weighted_f1": weighted_f1,
+            "tp": tp_configs,
+            "fp": fp_configs,
+            "fn": fn_configs,
+            "tn": tn_configs,
             "false_positives": fp_total / count if count else 0.0,
             "misses": fn_total / count if count else 0.0,
         }
@@ -106,9 +151,13 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
     # Print results
     for tool, metrics in results.items():
         print(f"\n### LLM Agent vs {tool.capitalize()} ###")
-        print(f"  Precision: {metrics['precision']:.3f}")
-        print(f"  Recall:    {metrics['recall']:.3f}")
-        print(f"  F1 Score:  {metrics['f1']:.3f}")
+        print(f"  Precision:         {metrics['precision']:.3f}")
+        print(f"  Recall:            {metrics['recall']:.3f}")
+        print(f"  F1 Score:          {metrics['f1']:.3f}")
+        print(f"  WeightedPrecision: {metrics['weighted_precision']:.3f}")
+        print(f"  WeightedRecall:    {metrics['weighted_recall']:.3f}")
+        print(f"  WeightedF1:        {metrics['weighted_f1']:.3f}")
+        print(f"  TP: {metrics['tp']}  FP: {metrics['fp']}  FN: {metrics['fn']}  TN: {metrics['tn']}")
         print(f"  Extras:    {metrics['false_positives']:.3f}")
         print(f"  Misses:    {metrics['misses']:.3f}")
 
@@ -151,7 +200,8 @@ def evaluate_llm_per_tool_with_normalize(
     """
     Evaluate LLM-detected tags against specific tool-detected tags,
     normalizing all tags using missconfig_map.json for a fair comparison.
-    Returns precision, recall, F1, as well as counts for extra and missing labels.
+    Returns precision, recall, F1 as well as weighted metrics and confusion
+    matrix counts for each tool.
     """
 
     # Load LLM results
@@ -192,6 +242,13 @@ def evaluate_llm_per_tool_with_normalize(
         skipped = 0
         fp_total = 0
         fn_total = 0
+        tp_configs = 0
+        fp_configs = 0
+        fn_configs = 0
+        tn_configs = 0
+        weighted_tp = 0
+        weighted_fp = 0
+        weighted_fn = 0
 
         if tool_col not in merged.columns:
             print(f"Warning: Tool column '{tool_col}' not found in data. Skipping.")
@@ -218,10 +275,26 @@ def evaluate_llm_per_tool_with_normalize(
             all_tags = llm_tags.union(tool_tags)
             if not all_tags:
                 skipped += 1
+                tn_configs += 1
                 continue
 
             fp_total += len(llm_tags - tool_tags)
             fn_total += len(tool_tags - llm_tags)
+
+            weighted_tp += len(llm_tags & tool_tags)
+            weighted_fp += len(llm_tags - tool_tags)
+            weighted_fn += len(tool_tags - llm_tags)
+
+            has_llm = bool(llm_tags)
+            has_tool = bool(tool_tags)
+            if has_llm and has_tool:
+                tp_configs += 1
+            elif has_llm and not has_tool:
+                fp_configs += 1
+            elif not has_llm and has_tool:
+                fn_configs += 1
+            else:
+                tn_configs += 1
 
             y_true = [1 if tag in tool_tags else 0 for tag in all_tags]
             y_pred = [1 if tag in llm_tags else 0 for tag in all_tags]
@@ -231,10 +304,30 @@ def evaluate_llm_per_tool_with_normalize(
             f1s.append(f1_score(y_true, y_pred, zero_division=0))
 
         count = len(precisions)
+
+        weighted_precision = (
+            weighted_tp / (weighted_tp + weighted_fp) if (weighted_tp + weighted_fp) else 0.0
+        )
+        weighted_recall = (
+            weighted_tp / (weighted_tp + weighted_fn) if (weighted_tp + weighted_fn) else 0.0
+        )
+        weighted_f1 = (
+            2 * weighted_precision * weighted_recall / (weighted_precision + weighted_recall)
+            if (weighted_precision + weighted_recall) > 0
+            else 0.0
+        )
+
         results[tool_shortname] = {
             "precision": sum(precisions) / count if count else 0.0,
             "recall": sum(recalls) / count if count else 0.0,
             "f1": sum(f1s) / count if count else 0.0,
+            "weighted_precision": weighted_precision,
+            "weighted_recall": weighted_recall,
+            "weighted_f1": weighted_f1,
+            "tp": tp_configs,
+            "fp": fp_configs,
+            "fn": fn_configs,
+            "tn": tn_configs,
             "skipped": skipped,
             "count": count,
             "false_positives": fp_total / count if count else 0.0,
@@ -243,9 +336,13 @@ def evaluate_llm_per_tool_with_normalize(
 
     for tool, metrics in results.items():
         print(f"\n### LLM Agent vs {tool.capitalize()} ###")
-        print(f"  Precision: {metrics['precision']:.3f}")
-        print(f"  Recall:    {metrics['recall']:.3f}")
-        print(f"  F1 Score:  {metrics['f1']:.3f}")
+        print(f"  Precision:         {metrics['precision']:.3f}")
+        print(f"  Recall:            {metrics['recall']:.3f}")
+        print(f"  F1 Score:          {metrics['f1']:.3f}")
+        print(f"  WeightedPrecision: {metrics['weighted_precision']:.3f}")
+        print(f"  WeightedRecall:    {metrics['weighted_recall']:.3f}")
+        print(f"  WeightedF1:        {metrics['weighted_f1']:.3f}")
+        print(f"  TP: {metrics['tp']}  FP: {metrics['fp']}  FN: {metrics['fn']}  TN: {metrics['tn']}")
         print(f"  Extras:    {metrics['false_positives']:.3f}")
         print(f"  Misses:    {metrics['misses']:.3f}")
         print(f"  Skipped:   {metrics['skipped']} (out of {metrics['skipped'] + metrics['count']})")
