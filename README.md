@@ -48,6 +48,25 @@ industry tools. The script prints precision, recall, and F1 along with the
 average number of extra tags (false positives) and missing tags (misses) per
 configuration for each tool.
 
+We compared their performance using the common classification metrics of
+precision, recall, and the F1, weighted by the occurrence of the various KCF
+misconfigs in the test set. For convenience, in the remainder of the paper the
+terms precision, recall, and F1 represent the weighted precision, weighted
+recall, and weighted F1, respectively. To compute the value of these
+classification performance metrics, we define their building blocks as
+follows:
+
+- **True positives (TPs)** – Instances where both the LLM and at least one RB
+  tool correctly detected a misconfig.
+- **False positives (FPs)** – Instances where the LLM erroneously detected a
+  misconfig that was not recognized by any of the RB tools. Because rule-based
+  detectors are limited to their programmed rules, a FP might actually be a
+  variant of a known misconfig that does not exactly match any coded rule.
+- **False negatives (FNs)** – Instances where a misconfig was overlooked by the
+  LLM but detected by one of the RB tools.
+- **True negatives (TNs)** – Instances in which there was consensus between the
+  LLM and the RB tools as to the absence of misconfig.
+
 ```bash
 python evaluate_results.py path/to/agent_results.json
 ```
