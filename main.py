@@ -243,9 +243,9 @@ def run_agent_for_tool(filename: str, tags_tool: str, limit: int, with_validatio
     # Evaluate results
     print(f"\n--- Evaluating results for {tags_tool} ---")
     print("Evaluating without normalization:")
-    evaluate_llm_per_tool(result_path, tools_to_compare=[tags_tool, tags_tool + "_new"])
+    evaluate_llm_per_tool(result_path, tools_to_compare=[tags_tool, tags_tool + "_new"], save_csv=True)
     print("\nEvaluating with normalization:")
-    evaluate_llm_per_tool_with_normalize(result_path, tools_to_compare=[tags_tool, tags_tool + "_new"])
+    evaluate_llm_per_tool_with_normalize(result_path, tools_to_compare=[tags_tool, tags_tool + "_new"], save_csv=True)
 
 
 def main():
