@@ -1,13 +1,15 @@
 import pandas as pd
 import json
+import os
 from sklearn.metrics import precision_score, recall_score, f1_score
 from ast import literal_eval
-import json
 LABELS_PATH = "10k_open_source_labels.csv"
 MISS_CONFIG_MAP_PATH = "misconfigs_map.json"
 
 
-def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_compare=None):
+def evaluate_llm_per_tool(
+    llm_json_path, tools_csv_path=LABELS_PATH, tools_to_compare=None, save_csv=False
+):
     """
     Evaluate LLM-detected tags against specific tool-detected tags.
     In addition to precision, recall and F1, counts of false positives
@@ -21,6 +23,8 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
         tools_to_compare (list[str] or None): Subset of tools to evaluate against,
             e.g., ['checkov'] or ['kube_linter', 'terrascan'].
             If None, all tools are used.
+        save_csv (bool): If True, save the computed metrics to a CSV file
+            alongside the llm_json_path with a .csv extension.
     """
 
     # Load LLM results
@@ -161,6 +165,12 @@ def evaluate_llm_per_tool(llm_json_path, tools_csv_path=LABELS_PATH, tools_to_co
         print(f"  Extras:    {metrics['false_positives']:.3f}")
         print(f"  Misses:    {metrics['misses']:.3f}")
 
+    if save_csv:
+        output_path = os.path.splitext(llm_json_path)[0] + ".csv"
+        pd.DataFrame.from_dict(results, orient="index").to_csv(
+            output_path, index_label="tool"
+        )
+
     return results
 
 
@@ -195,13 +205,16 @@ def evaluate_llm_per_tool_with_normalize(
     llm_json_path,
     tools_csv_path=LABELS_PATH,
     missconfig_json_path=MISS_CONFIG_MAP_PATH,
-    tools_to_compare=None
+    tools_to_compare=None,
+    save_csv=False,
 ):
     """
     Evaluate LLM-detected tags against specific tool-detected tags,
     normalizing all tags using missconfig_map.json for a fair comparison.
     Returns precision, recall, F1 as well as weighted metrics and confusion
     matrix counts for each tool.
+    If save_csv is True, metrics are written next to the llm_json_path with a
+    `_normalize.csv` extension.
     """
 
     # Load LLM results
@@ -347,6 +360,12 @@ def evaluate_llm_per_tool_with_normalize(
         print(f"  Misses:    {metrics['misses']:.3f}")
         print(f"  Skipped:   {metrics['skipped']} (out of {metrics['skipped'] + metrics['count']})")
 
+    if save_csv:
+        output_path = os.path.splitext(llm_json_path)[0] + "_normalize.csv"
+        pd.DataFrame.from_dict(results, orient="index").to_csv(
+            output_path, index_label="tool"
+        )
+
     return results
 
 if __name__ == "__main__":
@@ -358,11 +377,17 @@ if __name__ == "__main__":
 
     # Evaluate without normalization
     print("Evaluating without normalization:")
-    evaluate_llm_per_tool(llm_json_path, tools_csv_path, tools_to_compare=[tool_name])
+    evaluate_llm_per_tool(
+        llm_json_path, tools_csv_path, tools_to_compare=[tool_name], save_csv=True
+    )
 
     # Evaluate with normalization for
     print(f"\nEvaluating with normalization for {tool_name}:")
     evaluate_llm_per_tool_with_normalize(
-        llm_json_path, tools_csv_path, missconfig_json_path, tools_to_compare=[tool_name]
+        llm_json_path,
+        tools_csv_path,
+        missconfig_json_path,
+        tools_to_compare=[tool_name],
+        save_csv=True,
     )
 
