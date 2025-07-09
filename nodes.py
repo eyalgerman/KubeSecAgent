@@ -61,7 +61,7 @@ yaml:
 Input summary:
 {summary}
 
-Look at previous AI messages . if the rag tool was already usd do not use it again.
+Look at previous AI messages, if the rag tool was already usd do not use it again.
 you need to choose the most relevant tag  for the summary 
 
 Expected final response format **exactly**, if none match, answer `no_error`:
