@@ -81,71 +81,71 @@ def setup_llm(model_provider: str, model_name: str):
     raise ValueError(f"Unsupported model provider: {model_provider}")
 
 
-# def build_graph(llm_with_tools, tools, validator_config: dict | None = None):
-#     """
-#     Compiles a LangGraph graph, with an optional validator node.
-#     This single function replaces the two separate build functions.
-#
-#     Args:
-#         llm_with_tools: Chat model with tools bound.
-#         tools (list): Tool callables to expose.
-#         validator_config (dict | None): If provided, adds a validator node.
-#                                         Expected keys: "llm" and "tag_definitions".
-#
-#     Returns:
-#         The compiled graph instance.
-#     """
+def build_graph(llm_with_tools, tools, validator_config: dict | None = None):
+    """
+    Compiles a LangGraph graph, with an optional validator node.
+    This single function replaces the two separate build functions.
+
+    Args:
+        llm_with_tools: Chat model with tools bound.
+        tools (list): Tool callables to expose.
+        validator_config (dict | None): If provided, adds a validator node.
+                                        Expected keys: "llm" and "tag_definitions".
+
+    Returns:
+        The compiled graph instance.
+    """
+    graph = StateGraph(nodes.AgentState)
+    graph.set_entry_point(K_EXPERT_NODE)
+
+    # Add core nodes
+    graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
+    graph.add_node(TOOL_NODE, ToolNode(tools=tools))
+
+    # Add core edges
+    graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
+    graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
+
+    # Conditionally add the validator node and its connections
+    if validator_config:
+        graph.add_node(
+            VALIDATOR_NODE,
+            nodes.TagValidator(validator_config["llm"], validator_config["tag_definitions"])
+        )
+        # The K_Expert's final answer is sent to the validator
+        graph.add_edge(K_EXPERT_NODE, VALIDATOR_NODE)
+        graph.set_finish_point(VALIDATOR_NODE)
+    else:
+        # If no validator, the graph finishes after the K_Expert gives a final answer
+        graph.set_finish_point(K_EXPERT_NODE)
+
+    return graph.compile()
+
+
+# def build_graph(llm_with_tools, tools):
 #     graph = StateGraph(nodes.AgentState)
 #     graph.set_entry_point(K_EXPERT_NODE)
-#
-#     # Add core nodes
 #     graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
-#     graph.add_node(TOOL_NODE, ToolNode(tools=tools))
-#
-#     # Add core edges
+#     tool_node = ToolNode(tools=tools)
+#     graph.add_node(TOOL_NODE, tool_node)
 #     graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
 #     graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
-#
-#     # Conditionally add the validator node and its connections
-#     if validator_config:
-#         graph.add_node(
-#             VALIDATOR_NODE,
-#             nodes.TagValidator(validator_config["llm"], validator_config["tag_definitions"])
-#         )
-#         # The K_Expert's final answer is sent to the validator
-#         graph.add_edge(K_EXPERT_NODE, VALIDATOR_NODE)
-#         graph.set_finish_point(VALIDATOR_NODE)
-#     else:
-#         # If no validator, the graph finishes after the K_Expert gives a final answer
-#         graph.set_finish_point(K_EXPERT_NODE)
-#
 #     return graph.compile()
-
-
-def build_graph(llm_with_tools, tools):
-    graph = StateGraph(nodes.AgentState)
-    graph.set_entry_point(K_EXPERT_NODE)
-    graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
-    tool_node = ToolNode(tools=tools)
-    graph.add_node(TOOL_NODE, tool_node)
-    graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
-    graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
-    return graph.compile()
-
-
-def build_graph_with_validator(llm_with_tools, tools, tag_definitions, llm):
-    print("Using graph with validator node.")
-    graph = StateGraph(nodes.AgentState)
-    graph.set_entry_point(K_EXPERT_NODE)
-    graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
-    tool_node = ToolNode(tools=tools)
-    graph.add_node(TOOL_NODE, tool_node)
-    graph.add_node(VALIDATOR_NODE, nodes.TagValidator(llm, tag_definitions))
-    graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
-    graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
-    graph.add_edge(K_EXPERT_NODE, VALIDATOR_NODE)
-    graph.set_finish_point(VALIDATOR_NODE)
-    return graph.compile()
+#
+#
+# def build_graph_with_validator(llm_with_tools, tools, tag_definitions, llm):
+#     print("Using graph with validator node.")
+#     graph = StateGraph(nodes.AgentState)
+#     graph.set_entry_point(K_EXPERT_NODE)
+#     graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
+#     tool_node = ToolNode(tools=tools)
+#     graph.add_node(TOOL_NODE, tool_node)
+#     graph.add_node(VALIDATOR_NODE, nodes.TagValidator(llm, tag_definitions))
+#     graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
+#     graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
+#     graph.add_edge(K_EXPERT_NODE, VALIDATOR_NODE)
+#     graph.set_finish_point(VALIDATOR_NODE)
+#     return graph.compile()
 
 def process_configs(app, configs, llm):
     """Run the LangGraph app over a list of configs and collect tag results.
@@ -181,7 +181,7 @@ def process_configs(app, configs, llm):
     return all_results
 
 
-def save_results(results: list, out_dir: str = "results", tags_tool: str = "checkov"):
+def save_results(results: list, out_dir: str = "results", tags_tool: str = "checkov", model_name: str = "gpt-4o", with_validation: bool = True, limit: int = 5, top_k: int = 5):
     """Persist results to a timestamped JSON file and return its path.
     Args:
         results (list): Output from func:`process_configs`.
@@ -192,7 +192,8 @@ def save_results(results: list, out_dir: str = "results", tags_tool: str = "chec
     """
     os.makedirs(out_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = os.path.join(out_dir, f"agent_results_tags_{tags_tool}_{timestamp}.json")
+    # output_path = os.path.join(out_dir, f"agent_results_tags_{tags_tool}_{timestamp}.json")
+    output_path = os.path.join(out_dir, f"agent_results_tags_{tags_tool}_{model_name}_{'with_validation' if with_validation else 'no_validation'}_limit_{limit}_top_k_{top_k}_{timestamp}.json")
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
@@ -201,7 +202,7 @@ def save_results(results: list, out_dir: str = "results", tags_tool: str = "chec
     return output_path
 
 
-def _setup_agent_and_tools(tags_tool: str, with_validation: bool, model_provider: str, model_name: str):
+def _setup_agent_and_tools(tags_tool: str, with_validation: bool, model_provider: str, model_name: str, top_k: int = 5):
     """A helper function to handle all the setup logic for the agent."""
     if not os.path.exists(f"rag_db_{tags_tool}"):
         start_rag(tags_tool, MISS_CONFIG_MAP_PATH)
@@ -209,7 +210,7 @@ def _setup_agent_and_tools(tags_tool: str, with_validation: bool, model_provider
         print("RAG DB already initialized. Skipping setup.")
 
     llm = setup_llm(model_provider, model_name)
-    rag_tool = build_rag_tool(tags_tool)
+    rag_tool = build_rag_tool(tags_tool, k=top_k)
     tools = [search_tool, rag_tool]
     llm_with_tools = llm.bind_tools(tools=tools)
 
@@ -220,17 +221,17 @@ def _setup_agent_and_tools(tags_tool: str, with_validation: bool, model_provider
         tag_definitions = all_tag_defs.get(tags_tool, {})
         validator_config = {"llm": llm, "tag_definitions": tag_definitions}
 
-    # app = build_graph(llm_with_tools, tools, validator_config)
-    if with_validation:
-        app = build_graph_with_validator(llm_with_tools, tools, tag_definitions, llm)
-    else:
-        app = build_graph(llm_with_tools, tools)
+    app = build_graph(llm_with_tools, tools, validator_config)
+    # if with_validation:
+    #     app = build_graph_with_validator(llm_with_tools, tools, tag_definitions, llm)
+    # else:
+    #     app = build_graph(llm_with_tools, tools)
     return app, llm
 
 
-def run_agent_for_tool(filename: str, tags_tool: str, limit: int, with_validation: bool, model_provider: str, model_name: str):
+def run_agent_for_tool(filename: str, tags_tool: str, limit: int, with_validation: bool, model_provider: str, model_name: str, top_k: int = 5):
     """Run the agent on a single tool's dataset and evaluate the results."""
-    app, llm = _setup_agent_and_tools(tags_tool, with_validation, model_provider, model_name)
+    app, llm = _setup_agent_and_tools(tags_tool, with_validation, model_provider, model_name, top_k)
 
     with open(filename, "r", encoding="utf-8") as f:
         configs = json.load(f)
@@ -238,7 +239,7 @@ def run_agent_for_tool(filename: str, tags_tool: str, limit: int, with_validatio
         configs = configs[:limit]
 
     results = process_configs(app, configs, llm)
-    result_path = save_results(results, tags_tool=tags_tool)
+    result_path = save_results(results, tags_tool=tags_tool, model_name=model_name, with_validation=with_validation, limit=limit, top_k=top_k)
 
     # Evaluate results
     print(f"\n--- Evaluating results for {tags_tool} ---")
@@ -262,6 +263,10 @@ def main():
     parser.add_argument(
         "--limit", type=int, default=5,
         help="Maximum number of configs to process per tool. -1 for all."
+    )
+    parser.add_argument(
+        "--top-k", type=int, default=5,
+        help="Number of top results to return from the RAG tool."
     )
     parser.add_argument(
         "--model-provider", type=str, default="openai", choices=["openai", "google", "huggingface"],
