@@ -258,7 +258,7 @@ def main():
     )
     parser.add_argument(
         "--tags-tools", nargs='+', default=["checkov"],
-        help='List of tools to run (e.g., "checkov", "kube_linter").'
+        help='List of tools to run (e.g., "checkov", "kube_linter", "terrascan").'
     )
     parser.add_argument(
         "--limit", type=int, default=5,
@@ -291,7 +291,8 @@ def main():
                 limit=args.limit,
                 with_validation=args.with_validation,
                 model_provider=args.model_provider,
-                model_name=args.model_name
+                model_name=args.model_name,
+                top_k=args.top_k
             )
             print(f"===== Finished processing with tool: {tool} =====")
         except Exception as e:

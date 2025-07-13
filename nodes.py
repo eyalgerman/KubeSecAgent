@@ -44,25 +44,25 @@ You are a Kubernetes security expert.
 Your task:
 1. Analyze the following Kubernetes YAML and misconfig summary sentence.
 
-** its important to know you only use the rag tool once, then you must continue and choose the most relevant tag 
+** It's important to know you only use the rag tool once, then you must continue and choose the most relevant tag 
 Instructions:
 Do not invent or add extra problems.
 You may only use 1 sentence per tool call.
 
-this is the context massages:
+This is the context massages:
 {
     messages
 }
 The Rag tool retrieve  options . you need to choose the most relevant one for the summary 
 
-yaml:
+Yaml:
 {yaml}
 
 Input summary:
 {summary}
 
 Look at previous AI messages, if the rag tool was already usd do not use it again.
-you need to choose the most relevant tag  for the summary 
+you need to choose the most relevant tag for the summary 
 
 Expected final response format **exactly**, if none match, answer `no_error`:
 
