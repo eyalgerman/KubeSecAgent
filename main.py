@@ -50,24 +50,49 @@ def setup_llm(model_provider: str, model_name: str):
     if model_provider == "huggingface":
         try:
             import torch
-            from transformers import pipeline
+            from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
             from langchain_community.llms.huggingface_pipeline import HuggingFacePipeline
             from langchain_community.chat_models.huggingface import ChatHuggingFace
+            from langchain_community.llms import HuggingFaceTextGenInference
+            from langchain import HuggingFaceHub
 
             print("Initializing Hugging Face model...")
-            print("NOTE: The selected model MUST be fine-tuned for tool/function-calling.")
+            hf_token = os.getenv("HUGGINGFACE_TOKEN")
+            # --- LOCAL LOAD ---
+            try:
+                print("Attempting to load HuggingFace model locally...")
+                tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, token=hf_token)
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_name,
+                    device_map="auto",
+                    torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+                    trust_remote_code=True,
+                    token=hf_token,
+                )
+                hf_pipeline = pipeline(
+                    "text-generation",
+                    model=model,
+                    tokenizer=tokenizer,
+                    device_map="auto",
+                    torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
+                    max_new_tokens=512
+                )
+                return HuggingFacePipeline(pipeline=hf_pipeline)
+            except Exception as e:
+                print(f"Local load failed: {e}")
+                print("Falling back to HuggingFaceHub remote inference.")
 
-            # Create a text-generation pipeline with the specified model
-            hf_pipeline = pipeline(
-                "text-generation",
-                model=model_name,
-                torch_dtype=torch.bfloat16,  # Use bfloat16 for better performance on modern GPUs
-                device_map="auto",  # Automatically distribute the model across available hardware
+            # --- REMOTE VIA HUGGINGFACEHUB ---
+            return HuggingFaceHub(
+                repo_id=model_name,
+                huggingfacehub_api_token=hf_token,
+                model_kwargs={
+                    "temperature": 0.0,
+                    "max_new_tokens": 512,
+                    "trust_remote_code": True
+                }
             )
 
-            # Wrap the pipeline in LangChain's LLM and ChatModel interfaces
-            llm = HuggingFacePipeline(pipeline=hf_pipeline)
-            return ChatHuggingFace(llm=llm)
 
         except ImportError:
             print("Hugging Face libraries not found.")
@@ -122,31 +147,6 @@ def build_graph(llm_with_tools, tools, validator_config: dict | None = None):
     return graph.compile()
 
 
-# def build_graph(llm_with_tools, tools):
-#     graph = StateGraph(nodes.AgentState)
-#     graph.set_entry_point(K_EXPERT_NODE)
-#     graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
-#     tool_node = ToolNode(tools=tools)
-#     graph.add_node(TOOL_NODE, tool_node)
-#     graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
-#     graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
-#     return graph.compile()
-#
-#
-# def build_graph_with_validator(llm_with_tools, tools, tag_definitions, llm):
-#     print("Using graph with validator node.")
-#     graph = StateGraph(nodes.AgentState)
-#     graph.set_entry_point(K_EXPERT_NODE)
-#     graph.add_node(K_EXPERT_NODE, nodes.k_expert(llm_with_tools))
-#     tool_node = ToolNode(tools=tools)
-#     graph.add_node(TOOL_NODE, tool_node)
-#     graph.add_node(VALIDATOR_NODE, nodes.TagValidator(llm, tag_definitions))
-#     graph.add_conditional_edges(K_EXPERT_NODE, nodes.tool_use)
-#     graph.add_edge(TOOL_NODE, K_EXPERT_NODE)
-#     graph.add_edge(K_EXPERT_NODE, VALIDATOR_NODE)
-#     graph.set_finish_point(VALIDATOR_NODE)
-#     return graph.compile()
-
 def process_configs(app, configs, llm):
     """Run the LangGraph app over a list of configs and collect tag results.
     Args:
@@ -158,25 +158,35 @@ def process_configs(app, configs, llm):
     """
 
     all_results = []
+    skipped = 0
     for config in tqdm(configs, desc="Processing configs"):
-        yml = config["file_content"]
-        file_tags = []
+        try:
+            yml = config["file_content"]
+            file_tags = []
 
-        for missconfig in summarize_yaml(yml, llm):
-            state = {
-                "messages": ["start"],
-                "yaml": yml,
-                "summary": missconfig,
-                "tags": []
-            }
-            result = app.invoke(state)
-            file_tags.extend(result["tags"])
+            for missconfig in summarize_yaml(yml, llm):
+                state = {
+                    "messages": ["start"],
+                    "yaml": yml,
+                    "summary": missconfig,
+                    "tags": []
+                }
+                result = app.invoke(state)
+                file_tags.extend(result["tags"])
 
-        all_results.append({
-            "file_name": config["file"],
-            "tags": file_tags
-        })
-        print(f"Processed {config['file']} with tags: {file_tags}\n\n")
+            all_results.append({
+                "file_name": config["file"],
+                "tags": file_tags
+            })
+            print(f"Processed {config['file']} with tags: {file_tags}\n\n")
+        except Exception as e:
+            print(f"Error processing {config['file']}: {e}")
+            print(f"Skipping this file.")
+            skipped += 1
+            continue
+
+    print(f"Skipped {skipped} files due to errors.")
+    print(f"Total processed configs: {len(all_results)}")
 
     return all_results
 

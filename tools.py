@@ -121,32 +121,6 @@ Do not include explanations or suggestions.
 Manifest:
 {yaml}
 """
-    prompt2 = f"""
-    You are a Kubernetes security auditor.
-
-    Your inputs
-    -----------
-    yaml:
-    {yaml}
-
-    Task
-    ----
-    1. Inspect **every** resource and field.  
-    2. **Find as many verifiable security issues or missing best practices as possible.**  
-    3. For each finding, write **one bullet** using wording that matches the
-       titles of common Kubernetes security rules, such as:
-       • "Container image tag is 'latest'"
-       • "Container runs as privileged"
-       • "HostPath volume used"
-    4. If the manifest is fully compliant, output exactly:
-       No issues found.
-
-    Formatting
-    ----------
-    – Use one bullet per line, starting with a dash and a single space.  
-    – Do **not** include explanations, recommendations, counts, or code.  
-    – Keep the text short (max ~10 words per bullet).  
-    """
 
     # 1. Call LLM
     response = llm.invoke([HumanMessage(content=prompt)])
