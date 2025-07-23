@@ -12,14 +12,6 @@ from typing import List
 
 load_dotenv()
 
-# llm = ChatOpenAI(model="gpt-4o", api_key=os.getenv("OPENAI_API_KEY"))
-#
-# # Load Chroma DB once
-# chroma_db = Chroma(
-#     collection_name="k8s-misconfigs",
-#     embedding_function=OpenAIEmbeddings()
-# )
-
 
 def build_rag_tool(tool_name: str, k: int = 5) -> tool:
     """
@@ -62,39 +54,6 @@ def build_rag_tool(tool_name: str, k: int = 5) -> tool:
         return "\n".join(formatted_results)
 
     return rag
-
-# @tool
-# def rag(query: str) -> str:
-#     """
-#     RAG database query to return misconfiguration tags relevant for a Kubernetes config summary.
-#     """
-#     db = Chroma(
-#         collection_name="checkov_misconfigs",
-#         embedding_function=OpenAIEmbeddings(),
-#         persist_directory="rag_db"
-#     )
-#
-#     print(f"\nQuery: {query}\n")
-#
-#     results = db.similarity_search(query, k=3)
-#
-#     print(f"\Rag result: {results}\n")
-#     if not results:
-#         print("No results found.")
-#         return "No relevant misconfiguration tags found."
-#
-#     formatted_results = []
-#     seen = set()
-#     for i, doc in enumerate(results):
-#         tag = doc.metadata.get("tag", "N/A")
-#         content = doc.page_content.strip()
-#         if tag not in seen:
-#             seen.add(tag)
-#             formatted_results.append(f"{tag}: {content}")
-#     p = "\n".join(formatted_results)
-#     print(p)
-#
-#     return p
 
 
 tavily_key = os.getenv("TAVILY_API_KEY")

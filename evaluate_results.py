@@ -1,3 +1,5 @@
+import argparse
+
 import pandas as pd
 import json
 import os
@@ -382,10 +384,15 @@ def evaluate_llm_per_tool_with_normalize(
 
     return results
 
+
 if __name__ == "__main__":
-    # Example usage
-    llm_json_path = "results/agent_results_tags_checkov_20250617_115228.json"
-    tool_name = "checkov"
+    parser = argparse.ArgumentParser(description="Evaluate LLM predictions for KubeSecAgent.")
+    parser.add_argument("--json_path", type=str, required=True, help="Path to LLM predictions JSON file.")
+    parser.add_argument("--tool", type=str, required=True, help="Tool name for comparison (e.g., checkov, kube_linter, terrascan).")
+    args = parser.parse_args()
+
+    llm_json_path = args.json_path
+    tool_name = args.tool_name
     tools_csv_path = LABELS_PATH
     missconfig_json_path = MISS_CONFIG_MAP_PATH
 

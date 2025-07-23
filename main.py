@@ -232,10 +232,6 @@ def _setup_agent_and_tools(tags_tool: str, with_validation: bool, model_provider
         validator_config = {"llm": llm, "tag_definitions": tag_definitions}
 
     app = build_graph(llm_with_tools, tools, validator_config)
-    # if with_validation:
-    #     app = build_graph_with_validator(llm_with_tools, tools, tag_definitions, llm)
-    # else:
-    #     app = build_graph(llm_with_tools, tools)
     return app, llm
 
 
@@ -283,7 +279,7 @@ def main():
         help="The provider for the language model."
     )
     parser.add_argument(
-        "--model-name", type=str, default="gpt-4o-mini",
+        "--model-name", type=str, default="gpt-4o",
         help='Model to use. E.g., "gpt-4o", "gemini-1.5-pro", or a Hugging Face ID like "NousResearch/Hermes-2-Pro-Llama-3-8B".'
     )
     parser.add_argument(
