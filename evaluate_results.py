@@ -197,6 +197,20 @@ def build_normalization_map_from_json(json_path, tool_name):
     return tag_norm_map
 
 def normalize_tags(tags, tag_norm_map):
+    """Return a normalized set of tags using ``tag_norm_map``.
+
+    Parameters
+    ----------
+    tags : Iterable[str]
+        Original tag values.
+    tag_norm_map : dict[str, str]
+        Mapping from tag to its canonical equivalent.
+
+    Returns
+    -------
+    set[str]
+        Normalized tag set with unknown tags preserved as-is.
+    """
     return set(tag_norm_map.get(tag, tag) for tag in tags)
 
 
