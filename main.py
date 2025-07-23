@@ -317,7 +317,7 @@ if __name__ == "__main__":
     # Run with default OpenAI GPT-4o on 5 manifests:
     # python main.py --limit 5
     #
-    # Run with Google Gemini:
+    main()
     # python main.py --model-provider google --model-name gemini-1.5-pro-latest --limit 5
     #
     # Run with a local Hugging Face model (ensure it's fine-tuned for tool-calling):
