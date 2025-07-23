@@ -35,6 +35,18 @@ def k_expert(llm):
     updated ``state`` is returned.
     """
     def expert(state):
+        """Run a single reasoning step with the LLM and update ``state``.
+
+        Parameters
+        ----------
+        state : AgentState
+            Current conversation state passed between graph nodes.
+
+        Returns
+        -------
+        dict
+            Updated state with any new assistant message and extracted tags.
+        """
         messages = state.get("messages", [])
         yaml = state.get("yaml", [])
         summary = state.get("summary")
@@ -102,7 +114,18 @@ tags: <tag-1>, <tag-2>, …, <tag-N>
 
 # conditional edge
 def tool_use(state: AgentState):
-    """Check if the last message contains tool calls."""
+    """Return the next node name if the conversation requests a tool.
+
+    Parameters
+    ----------
+    state : AgentState
+        Current conversation state.
+
+    Returns
+    -------
+    str
+        ``"tools"`` if a tool call is present, otherwise ``END``.
+    """
     last_message = state["messages"][-1]
     tool_calls = getattr(last_message, "tool_calls", [])
     # print tool call
@@ -123,16 +146,32 @@ class TagValidator:
     Keeps only tags explicitly confirmed by an LLM (or rule engine).
     """
     def __init__(self, llm, tag_definitions):
-        """
-        Args:
-            llm:   Chat model (same as other nodes).
-            tag_definitions (dict[str, str]): canonical explanation for each tag,
-                      e.g. {"CKV_K8S_123": "Pod must not run as root", ...}
+        """Create a new validator instance.
+
+        Parameters
+        ----------
+        llm : Any
+            Chat model used to confirm misconfigurations.
+        tag_definitions : dict[str, str]
+            Mapping of tag names to canonical rule descriptions.
         """
         self.llm = llm
         self.tag_defs = tag_definitions
 
     def __call__(self, state):
+        """Validate detected tags by asking the LLM for confirmation.
+
+        Parameters
+        ----------
+        state : AgentState
+            Current conversation state containing ``yaml``, ``summary``
+            and detected ``tags``.
+
+        Returns
+        -------
+        AgentState
+            The updated state with only confirmed tags retained.
+        """
         yaml_doc  = state["yaml"]
         summary   = state["summary"]
         tags      = state.get("tags", [])
